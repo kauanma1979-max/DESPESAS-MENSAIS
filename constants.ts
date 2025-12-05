@@ -10,8 +10,9 @@ export const MONTHS = [
 
 export const INCOME_TEMPLATES: QuickTransactionTemplate[] = [
   { id: 'salario_andre', name: 'SALÁRIO ANDRÉ', category: 'Salário', defaultAmount: 2664.00 },
-  { id: 'receita_kitnets', name: 'RECEITA DAS KITNETS', category: 'Investimento', defaultAmount: 2379.53 },
-  { id: 'receita_mari', name: 'RECEITA MARI', category: 'Outros', defaultAmount: 510.00 }
+  { id: 'receita_mari', name: 'RECEITA MARI', category: 'Outros', defaultAmount: 510.00 },
+  { id: 'kitnet_01', name: 'KITNET 01', category: 'Investimento', defaultAmount: 0.00 },
+  { id: 'receita_kitnets', name: 'KITNET 02', category: 'Investimento', defaultAmount: 2379.53 }
 ];
 
 export const EXPENSE_TEMPLATES: QuickTransactionTemplate[] = [
