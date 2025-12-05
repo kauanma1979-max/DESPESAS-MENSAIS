@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Wallet, TrendingUp, TrendingDown, Save, Download, Upload, 
-  Plus, Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, MoreVertical, Settings, Link as LinkIcon, Circle
+  Plus, Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, MoreVertical, Settings, Link as LinkIcon, Check
 } from 'lucide-react';
 import { INCOME_TEMPLATES, EXPENSE_TEMPLATES, MONTHS, YEARS } from './constants';
 import { 
@@ -585,14 +585,19 @@ const App: React.FC = () => {
                 ) : (
                   [...currentMonthTransactions].reverse().map(t => (
                     <div key={t.id} className={`group flex justify-between items-center p-5 border-b border-slate-100 hover:bg-slate-50 rounded-2xl transition-colors ${t.checked ? 'bg-emerald-50/50' : ''}`}>
-                      <div className="flex items-center gap-4 overflow-hidden">
+                      <div className="flex items-center gap-5 overflow-hidden">
                         {/* Checkbox / Verification Button */}
                         <button 
                           onClick={() => toggleTransactionCheck(t.id)}
-                          className={`p-2 rounded-full transition-colors ${t.checked ? 'text-emerald-500 bg-emerald-100 hover:bg-emerald-200' : 'text-slate-300 hover:text-slate-400 hover:bg-slate-100'}`}
+                          className={`
+                            w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm border-2 flex-shrink-0
+                            ${t.checked 
+                              ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-200 scale-105' 
+                              : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300 hover:bg-slate-50'}
+                          `}
                           title={t.checked ? "Marcado como conferido" : "Marcar como conferido"}
                         >
-                          {t.checked ? <CheckCircle size={28} fill="currentColor" /> : <Circle size={28} />}
+                          <Check size={32} strokeWidth={3} />
                         </button>
 
                         <div className="overflow-hidden">
