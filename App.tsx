@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Wallet, TrendingUp, TrendingDown, Save, Download, Upload, 
-  Plus, Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, MoreVertical, Settings, Link as LinkIcon
+  Plus, Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, MoreVertical, Settings, Link as LinkIcon, Circle
 } from 'lucide-react';
 import { INCOME_TEMPLATES, EXPENSE_TEMPLATES, MONTHS, YEARS } from './constants';
 import { 
@@ -55,6 +55,7 @@ const QuickTransactionRow: React.FC<QuickRowProps> = ({ template, state, onChang
   const [inputValue, setInputValue] = useState(formatCurrencyInputDisplay(state.amount));
 
   // Sync internal input state if external state changes (e.g. load defaults)
+  // We use a version key or just rely on value changes.
   useEffect(() => {
     setInputValue(formatCurrencyInputDisplay(state.amount));
   }, [state.amount]);
@@ -124,6 +125,7 @@ const App: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [transactions, setTransactions] = useState<MonthlyTransactions>({});
   const [quickState, setQuickState] = useState<MonthlyQuickState>({});
+  const [defaultsVersion, setDefaultsVersion] = useState(0); // Used to force re-render inputs
   
   const [manualDescription, setManualDescription] = useState('');
   const [manualAmount, setManualAmount] = useState('');
@@ -212,6 +214,9 @@ const App: React.FC = () => {
       ...prev,
       [monthKey]: newMonthState
     }));
+    
+    // Increment version to force inputs to re-read props
+    setDefaultsVersion(v => v + 1);
   };
 
   const handleDocumentsClick = () => {
@@ -228,7 +233,7 @@ const App: React.FC = () => {
 
     const processTemplate = (t: QuickTransactionTemplate, type: 'income' | 'expense') => {
       const st = currentMonthQuickState[t.id];
-      // Save if there is an amount > 0. No longer require manual checkbox.
+      // Save if there is an amount > 0.
       if (st && st.amount > 0) {
         // Check for duplicates (same description and same amount in this month)
         const isDuplicate = existingTransactions.some(ex => 
@@ -243,7 +248,8 @@ const App: React.FC = () => {
             amount: st.amount,
             category: t.category,
             type: type,
-            date: currentDate.toISOString()
+            date: currentDate.toISOString(),
+            checked: false // Default to unchecked
           });
         }
       }
@@ -278,7 +284,8 @@ const App: React.FC = () => {
       amount: amount,
       category: 'Manual',
       type,
-      date: currentDate.toISOString()
+      date: currentDate.toISOString(),
+      checked: false // Default to unchecked
     };
 
     setTransactions(prev => ({
@@ -295,6 +302,15 @@ const App: React.FC = () => {
     setTransactions(prev => ({
       ...prev,
       [monthKey]: prev[monthKey].filter(t => t.id !== id)
+    }));
+  };
+
+  const toggleTransactionCheck = (id: string) => {
+    setTransactions(prev => ({
+      ...prev,
+      [monthKey]: prev[monthKey].map(t => 
+        t.id === id ? { ...t, checked: !t.checked } : t
+      )
     }));
   };
 
@@ -466,7 +482,7 @@ const App: React.FC = () => {
                     <div className="space-y-5">
                       {INCOME_TEMPLATES.map(t => (
                         <QuickTransactionRow 
-                          key={t.id} 
+                          key={`${t.id}-${defaultsVersion}`} // Use key to force re-mount on version change
                           template={t} 
                           state={currentMonthQuickState[t.id] || { id: t.id, amount: 0, isPaid: false }}
                           onChange={handleQuickChange}
@@ -483,7 +499,7 @@ const App: React.FC = () => {
                     <div className="space-y-5">
                       {EXPENSE_TEMPLATES.map(t => (
                         <QuickTransactionRow 
-                          key={t.id} 
+                          key={`${t.id}-${defaultsVersion}`} // Use key to force re-mount on version change
                           template={t} 
                           state={currentMonthQuickState[t.id] || { id: t.id, amount: 0, isPaid: false }}
                           onChange={handleQuickChange}
@@ -568,13 +584,27 @@ const App: React.FC = () => {
                   </div>
                 ) : (
                   [...currentMonthTransactions].reverse().map(t => (
-                    <div key={t.id} className="group flex justify-between items-center p-5 border-b border-slate-100 hover:bg-slate-50 rounded-2xl transition-colors">
-                      <div className="overflow-hidden">
-                        <p className="font-bold text-slate-700 text-lg truncate mb-1">{t.description}</p>
-                        <p className="text-sm text-slate-400 font-medium">{t.category} • {new Date(t.date).toLocaleDateString('pt-BR')}</p>
+                    <div key={t.id} className={`group flex justify-between items-center p-5 border-b border-slate-100 hover:bg-slate-50 rounded-2xl transition-colors ${t.checked ? 'bg-emerald-50/50' : ''}`}>
+                      <div className="flex items-center gap-4 overflow-hidden">
+                        {/* Checkbox / Verification Button */}
+                        <button 
+                          onClick={() => toggleTransactionCheck(t.id)}
+                          className={`p-2 rounded-full transition-colors ${t.checked ? 'text-emerald-500 bg-emerald-100 hover:bg-emerald-200' : 'text-slate-300 hover:text-slate-400 hover:bg-slate-100'}`}
+                          title={t.checked ? "Marcado como conferido" : "Marcar como conferido"}
+                        >
+                          {t.checked ? <CheckCircle size={28} fill="currentColor" /> : <Circle size={28} />}
+                        </button>
+
+                        <div className="overflow-hidden">
+                          <p className={`font-bold text-lg truncate mb-1 ${t.checked ? 'text-slate-500 line-through decoration-slate-400' : 'text-slate-700'}`}>
+                            {t.description}
+                          </p>
+                          <p className="text-sm text-slate-400 font-medium">{t.category} • {new Date(t.date).toLocaleDateString('pt-BR')}</p>
+                        </div>
                       </div>
+
                       <div className="flex items-center gap-4">
-                        <span className={`font-bold text-xl whitespace-nowrap ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        <span className={`font-bold text-xl whitespace-nowrap ${t.checked ? 'opacity-60' : ''} ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                           {t.type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
                         </span>
                         <button 

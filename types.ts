@@ -6,6 +6,7 @@ export interface Transaction {
   category: string;
   type: 'income' | 'expense';
   date: string; // ISO string
+  checked?: boolean; // New field for verification status
 }
 
 export interface QuickTransactionTemplate {
