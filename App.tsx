@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Wallet, TrendingUp, TrendingDown, Save, Download, Upload, 
-  Plus, Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, MoreVertical, Settings, Link as LinkIcon, Check
+  Plus, Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, MoreVertical, Settings, Link as LinkIcon, Check, Edit
 } from 'lucide-react';
 import { INCOME_TEMPLATES, EXPENSE_TEMPLATES, MONTHS, YEARS } from './constants';
 import { 
@@ -133,10 +133,19 @@ const App: React.FC = () => {
   const [docLink, setDocLink] = useState('');
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
+  // Edit State
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editDescription, setEditDescription] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+
   // --- Computed ---
   const monthKey = getCurrentMonthKey(currentDate);
   const currentMonthTransactions = transactions[monthKey] || [];
   const currentMonthQuickState = quickState[monthKey] || {};
+
+  // Separate Income and Expense
+  const incomeTransactions = currentMonthTransactions.filter(t => t.type === 'income');
+  const expenseTransactions = currentMonthTransactions.filter(t => t.type === 'expense');
 
   const totalIncome = currentMonthTransactions
     .filter(t => t.type === 'income')
@@ -314,6 +323,41 @@ const App: React.FC = () => {
     }));
   };
 
+  // --- Edit Functions ---
+  const startEditing = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setEditDescription(transaction.description);
+    setEditAmount(formatCurrencyInputDisplay(transaction.amount));
+  };
+
+  const cancelEdit = () => {
+    setEditingTransaction(null);
+    setEditDescription('');
+    setEditAmount('');
+  };
+
+  const saveEdit = () => {
+    if (!editingTransaction) return;
+
+    const amount = parseCurrencyInput(editAmount);
+    if (!editDescription || amount <= 0) {
+      alert("Preencha a descrição e um valor válido.");
+      return;
+    }
+
+    setTransactions(prev => ({
+      ...prev,
+      [monthKey]: prev[monthKey].map(t => 
+        t.id === editingTransaction.id 
+          ? { ...t, description: editDescription, amount: amount } 
+          : t
+      )
+    }));
+
+    cancelEdit();
+  };
+
+
   const handleBackup = () => {
     const data = { transactions, quickState, version: 1 };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -345,6 +389,54 @@ const App: React.FC = () => {
     localStorage.setItem('docLink', docLink);
     setIsDocModalOpen(false);
   };
+
+  // Helper to render transaction row
+  const renderTransactionRow = (t: Transaction) => (
+    <div key={t.id} className={`group flex justify-between items-center p-5 border-b border-slate-100 hover:bg-slate-50 rounded-2xl transition-colors ${t.checked ? 'bg-emerald-50/50' : ''}`}>
+      <div className="flex items-center gap-5 overflow-hidden">
+        {/* Checkbox */}
+        <button 
+          onClick={() => toggleTransactionCheck(t.id)}
+          className={`
+            w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm border-2 flex-shrink-0
+            ${t.checked 
+              ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-200 scale-105' 
+              : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300 hover:bg-slate-50'}
+          `}
+          title={t.checked ? "Marcado como conferido" : "Marcar como conferido"}
+        >
+          <Check size={32} strokeWidth={3} />
+        </button>
+
+        <div className="overflow-hidden">
+          <p className={`font-bold text-lg truncate mb-1 ${t.checked ? 'text-slate-500 line-through decoration-slate-400' : 'text-slate-700'}`}>
+            {t.description}
+          </p>
+          <p className="text-sm text-slate-400 font-medium">{t.category} • {new Date(t.date).toLocaleDateString('pt-BR')}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <span className={`font-bold text-xl whitespace-nowrap ${t.checked ? 'opacity-60' : ''} ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+          {t.type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
+        </span>
+        <button 
+          onClick={() => startEditing(t)}
+          className="p-3 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+          title="Editar"
+        >
+          <Edit size={24} />
+        </button>
+        <button 
+          onClick={() => deleteTransaction(t.id)}
+          className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+          title="Excluir"
+        >
+          <Trash2 size={24} />
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-32">
@@ -571,7 +663,7 @@ const App: React.FC = () => {
           <div className="space-y-10">
             
             {/* Transaction List */}
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col h-[800px]">
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col h-[1100px]">
               <h2 className="text-3xl font-bold mb-8 flex items-center gap-4 text-slate-800">
                 <MoreVertical className="text-primary" size={36} /> Extrato do Mês
               </h2>
@@ -583,44 +675,27 @@ const App: React.FC = () => {
                     <p className="text-xl font-medium">Nenhuma transação registrada.</p>
                   </div>
                 ) : (
-                  [...currentMonthTransactions].reverse().map(t => (
-                    <div key={t.id} className={`group flex justify-between items-center p-5 border-b border-slate-100 hover:bg-slate-50 rounded-2xl transition-colors ${t.checked ? 'bg-emerald-50/50' : ''}`}>
-                      <div className="flex items-center gap-5 overflow-hidden">
-                        {/* Checkbox / Verification Button - Updated Style */}
-                        <button 
-                          onClick={() => toggleTransactionCheck(t.id)}
-                          className={`
-                            w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm border-2 flex-shrink-0
-                            ${t.checked 
-                              ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-200 scale-105' 
-                              : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300 hover:bg-slate-50'}
-                          `}
-                          title={t.checked ? "Marcado como conferido" : "Marcar como conferido"}
-                        >
-                          <Check size={32} strokeWidth={3} />
-                        </button>
-
-                        <div className="overflow-hidden">
-                          <p className={`font-bold text-lg truncate mb-1 ${t.checked ? 'text-slate-500 line-through decoration-slate-400' : 'text-slate-700'}`}>
-                            {t.description}
-                          </p>
-                          <p className="text-sm text-slate-400 font-medium">{t.category} • {new Date(t.date).toLocaleDateString('pt-BR')}</p>
-                        </div>
+                  <>
+                    {/* INCOMES SECTION */}
+                    {incomeTransactions.length > 0 && (
+                      <div className="mb-8">
+                        <h3 className="text-xl font-black text-emerald-600 uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-emerald-100">
+                          Receitas
+                        </h3>
+                        {incomeTransactions.map(renderTransactionRow)}
                       </div>
+                    )}
 
-                      <div className="flex items-center gap-4">
-                        <span className={`font-bold text-xl whitespace-nowrap ${t.checked ? 'opacity-60' : ''} ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {t.type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
-                        </span>
-                        <button 
-                          onClick={() => deleteTransaction(t.id)}
-                          className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 size={24} />
-                        </button>
+                    {/* EXPENSES SECTION */}
+                    {expenseTransactions.length > 0 && (
+                      <div>
+                         <h3 className="text-xl font-black text-rose-600 uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-rose-100">
+                          Despesas
+                        </h3>
+                        {expenseTransactions.map(renderTransactionRow)}
                       </div>
-                    </div>
-                  ))
+                    )}
+                  </>
                 )}
               </div>
 
@@ -649,6 +724,51 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Editing Modal */}
+      {editingTransaction && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-10 animate-in fade-in zoom-in duration-200">
+             <h3 className="text-3xl font-bold mb-6 flex items-center gap-4 text-slate-800">
+               <Edit className="text-primary" size={36} /> Editar Transação
+             </h3>
+             
+             <label className="block text-base font-bold text-slate-700 mb-3">Descrição</label>
+             <input 
+               type="text"
+               value={editDescription}
+               onChange={(e) => setEditDescription(e.target.value)}
+               className="w-full p-5 border-2 border-slate-200 rounded-xl mb-6 focus:ring-4 focus:ring-primary/10 focus:border-primary focus:outline-none transition-all text-lg"
+             />
+
+             <label className="block text-base font-bold text-slate-700 mb-3">Valor</label>
+             <input 
+               type="text"
+               value={editAmount}
+               onChange={(e) => {
+                const val = e.target.value.replace(/[^\d]/g, '');
+                setEditAmount(formatCurrencyInputDisplay(val ? parseInt(val)/100 : 0));
+               }}
+               className="w-full p-5 border-2 border-slate-200 rounded-xl mb-8 focus:ring-4 focus:ring-primary/10 focus:border-primary focus:outline-none transition-all text-lg font-bold text-right"
+             />
+
+             <div className="flex justify-end gap-4">
+               <button 
+                onClick={cancelEdit}
+                className="px-8 py-4 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors text-lg"
+               >
+                 Cancelar
+               </button>
+               <button 
+                onClick={saveEdit}
+                className="px-8 py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/30 text-lg"
+               >
+                 Salvar
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* Documents Modal */}
       {isDocModalOpen && (

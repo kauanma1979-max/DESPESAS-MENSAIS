@@ -23,7 +23,6 @@ export const EXPENSE_TEMPLATES: QuickTransactionTemplate[] = [
   { id: 'vivo', name: 'VIVO', category: 'Telefone', defaultAmount: 59.00 },
   { id: 'convenio_enzo', name: 'CONVENIO ENZO', category: 'Saúde', defaultAmount: 280.22 },
   { id: 'shopee', name: 'SHOPEE 02/06', category: 'Compras', defaultAmount: 169.92 },
-  { id: 'seguro_fianca', name: 'SEGURO FIANÇA', category: 'Moradia', defaultAmount: 129.51 },
   { id: 'seguro_fianca_victor', name: 'SEGURO FIANÇA - VICTOR', category: 'Moradia', defaultAmount: 129.53 },
   { id: 'seguro_fianca_alexandro', name: 'SEGURO FIANÇA - ALEXANDRO', category: 'Moradia', defaultAmount: 117.02 },
   { id: 'seguro_moto', name: 'SEGURO DA MOTO', category: 'Transporte', defaultAmount: 214.00 },
