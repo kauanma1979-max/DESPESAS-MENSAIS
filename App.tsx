@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Wallet, TrendingUp, TrendingDown, Save, Download, Upload, 
@@ -390,51 +389,62 @@ const App: React.FC = () => {
     setIsDocModalOpen(false);
   };
 
-  // Helper to render transaction row
+  // Helper to render transaction row with VERTICAL LAYOUT
   const renderTransactionRow = (t: Transaction) => (
-    <div key={t.id} className={`group flex justify-between items-center p-5 border-b border-slate-100 hover:bg-slate-50 rounded-2xl transition-colors ${t.checked ? 'bg-emerald-50/50' : ''}`}>
-      <div className="flex items-center gap-5 overflow-hidden">
-        {/* Checkbox */}
-        <button 
-          onClick={() => toggleTransactionCheck(t.id)}
-          className={`
-            w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm border-2 flex-shrink-0
-            ${t.checked 
-              ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-200 scale-105' 
-              : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300 hover:bg-slate-50'}
-          `}
-          title={t.checked ? "Marcado como conferido" : "Marcar como conferido"}
-        >
-          <Check size={32} strokeWidth={3} />
-        </button>
+    <div key={t.id} className={`flex items-start p-6 border-b border-slate-100 hover:bg-slate-50 transition-colors ${t.checked ? 'bg-emerald-50/40' : ''}`}>
+      
+      {/* 1. Checkbox (Left side) */}
+      <button 
+        onClick={() => toggleTransactionCheck(t.id)}
+        className={`
+          mt-1 mr-5 w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm border-2 flex-shrink-0
+          ${t.checked 
+            ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-200' 
+            : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300 hover:bg-slate-50'}
+        `}
+        title={t.checked ? "Marcado como conferido" : "Marcar como conferido"}
+      >
+        <Check size={32} strokeWidth={3} />
+      </button>
 
-        <div className="overflow-hidden">
-          <p className={`font-bold text-lg truncate mb-1 ${t.checked ? 'text-slate-500 line-through decoration-slate-400' : 'text-slate-700'}`}>
-            {t.description}
-          </p>
-          <p className="text-sm text-slate-400 font-medium">{new Date(t.date).toLocaleDateString('pt-BR')}</p>
+      {/* 2. Content Stack (Middle - Vertical Layout) */}
+      <div className="flex-grow min-w-0 flex flex-col gap-1">
+        
+        {/* NAME - Large, Bold, Breaks words */}
+        <div className={`text-xl font-bold leading-snug break-words ${t.checked ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
+          {t.description}
+        </div>
+
+        {/* VALUE - Extra Large, Colored */}
+        <div className={`text-2xl font-black ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'} ${t.checked ? 'opacity-60' : ''}`}>
+          {t.type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
+        </div>
+
+        {/* DATE - Smaller, gray */}
+        <div className="text-sm font-medium text-slate-400 flex items-center gap-1">
+          <Calendar size={14} />
+          {new Date(t.date).toLocaleDateString('pt-BR')}
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <span className={`font-bold text-xl whitespace-nowrap ${t.checked ? 'opacity-60' : ''} ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-          {t.type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
-        </span>
+      {/* 3. Actions (Right side) */}
+      <div className="flex flex-col gap-2 ml-4 self-center sm:self-start">
         <button 
           onClick={() => startEditing(t)}
-          className="p-3 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+          className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
           title="Editar"
         >
           <Edit size={24} />
         </button>
         <button 
           onClick={() => deleteTransaction(t.id)}
-          className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+          className="p-3 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
           title="Excluir"
         >
           <Trash2 size={24} />
         </button>
       </div>
+
     </div>
   );
 
