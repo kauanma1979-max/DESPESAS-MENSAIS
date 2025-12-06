@@ -412,7 +412,7 @@ const App: React.FC = () => {
           <p className={`font-bold text-lg truncate mb-1 ${t.checked ? 'text-slate-500 line-through decoration-slate-400' : 'text-slate-700'}`}>
             {t.description}
           </p>
-          <p className="text-sm text-slate-400 font-medium">{t.category} • {new Date(t.date).toLocaleDateString('pt-BR')}</p>
+          <p className="text-sm text-slate-400 font-medium">{new Date(t.date).toLocaleDateString('pt-BR')}</p>
         </div>
       </div>
 
@@ -663,7 +663,7 @@ const App: React.FC = () => {
           <div className="space-y-10">
             
             {/* Transaction List */}
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col h-[1100px]">
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col h-[1400px]">
               <h2 className="text-3xl font-bold mb-8 flex items-center gap-4 text-slate-800">
                 <MoreVertical className="text-primary" size={36} /> Extrato do Mês
               </h2>
