@@ -54,7 +54,6 @@ const QuickTransactionRow: React.FC<QuickRowProps> = ({ template, state, onChang
   const [inputValue, setInputValue] = useState(formatCurrencyInputDisplay(state.amount));
 
   // Sync internal input state if external state changes (e.g. load defaults)
-  // We use a version key or just rely on value changes.
   useEffect(() => {
     setInputValue(formatCurrencyInputDisplay(state.amount));
   }, [state.amount]);
@@ -87,7 +86,6 @@ const QuickTransactionRow: React.FC<QuickRowProps> = ({ template, state, onChang
     <div className={`flex items-center gap-4 p-5 bg-white border-2 rounded-2xl shadow-sm transition-all group ${state.isPaid ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-100 hover:border-blue-200'}`}>
       <div className="flex-1">
         <div className="font-bold text-slate-800 text-xl">{template.name}</div>
-        {/* Description removed per request */}
       </div>
       
       <div className="relative">
