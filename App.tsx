@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Wallet, TrendingUp, TrendingDown, Save, Download, 
+  Wallet, TrendingUp, TrendingDown, Save, Download, Upload, 
   Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, 
   Check, Edit, AlertTriangle, Bell, Info, Cloud, CloudOff, Database
 } from 'lucide-react';
@@ -16,11 +16,9 @@ import {
 } from './utils';
 
 // --- CONFIGURAÇÃO SUPABASE ---
-// IMPORTANTE: Substitua os valores abaixo pelos que você obteve no Passo 3 do guia anterior
 const SUPABASE_URL = 'https://wuttvyyvrkjpyadpfmug.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind1dHR2eXl2cmtqcHlhZHBmbXVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzg1NzUsImV4cCI6MjA4Mjk1NDU3NX0.568tLM2Qm5RdCLpedV3g0GX9m18nSzeo1mwb6L945eA';
 
-// Verificação de segurança para evitar o erro "Invalid supabaseUrl"
 const isConfigured = SUPABASE_URL && SUPABASE_URL.startsWith('http');
 const supabase = isConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
@@ -165,6 +163,8 @@ const App: React.FC = () => {
   const [docLink, setDocLink] = useState('');
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editDescription, setEditDescription] = useState('');
@@ -248,7 +248,7 @@ const App: React.FC = () => {
     } catch (err) {
       console.error("Erro ao conectar ao Supabase:", err);
       setIsDbConnected(false);
-      addToast("Modo Offline: Dados não sincronizados.", "info");
+      addToast("Modo Offline: Usando dados locais.", "info");
     }
   };
 
@@ -458,6 +458,43 @@ const App: React.FC = () => {
     addToast("Alterações salvas.");
   };
 
+  const handleRestoreClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const data = JSON.parse(content);
+
+        if (data.transactions && data.quickState) {
+          showConfirm(
+            "Restaurar Backup",
+            "Esta ação irá substituir as informações atuais no seu navegador pelas informações do arquivo. Deseja continuar?",
+            () => {
+              setTransactions(data.transactions);
+              setQuickState(data.quickState);
+              addToast("Backup restaurado com sucesso!", "success");
+              setConfirmModal(null);
+            }
+          );
+        } else {
+          addToast("Arquivo de backup inválido ou corrompido.", "error");
+        }
+      } catch (err) {
+        addToast("Erro ao ler arquivo de backup.", "error");
+      }
+    };
+    reader.readAsText(file);
+    // Limpa o input para permitir selecionar o mesmo arquivo novamente
+    e.target.value = '';
+  };
+
   const renderTransactionRow = (t: Transaction) => (
     <div key={t.id} className={`fade-in flex items-start p-5 border-b border-slate-100 hover:bg-white/50 transition-modern group ${t.checked ? 'bg-emerald-50/30' : ''}`}>
       <button 
@@ -526,6 +563,16 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex gap-4">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileChange} 
+              accept=".json" 
+              className="hidden" 
+            />
+            <button onClick={handleRestoreClick} className="flex items-center gap-3 px-8 py-4 glass-modal hover:bg-white/20 rounded-2xl text-lg font-bold transition-modern hover:scale-105">
+              <Upload size={24} /> Restaurar
+            </button>
             <button onClick={() => {
               const data = { transactions, quickState, version: 1 };
               const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
