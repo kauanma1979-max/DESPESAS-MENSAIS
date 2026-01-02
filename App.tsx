@@ -16,11 +16,13 @@ import {
 } from './utils';
 
 // --- CONFIGURAÇÃO SUPABASE ---
-// IMPORTANTE: Substitua os valores abaixo pelos que você obteve no Passo 3
-const SUPABASE_URL = 'SUA_URL_AQUI'; 
-const SUPABASE_ANON_KEY = 'SUA_CHAVE_ANON_AQUI';
+// IMPORTANTE: Substitua os valores abaixo pelos que você obteve no Passo 3 do guia anterior
+const SUPABASE_URL = 'https://wuttvyyvrkjpyadpfmug.supabase.co'; 
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind1dHR2eXl2cmtqcHlhZHBmbXVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzg1NzUsImV4cCI6MjA4Mjk1NDU3NX0.568tLM2Qm5RdCLpedV3g0GX9m18nSzeo1mwb6L945eA';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Verificação de segurança para evitar o erro "Invalid supabaseUrl"
+const isConfigured = SUPABASE_URL && SUPABASE_URL.startsWith('http');
+const supabase = isConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 // --- Sub-components ---
 
@@ -198,8 +200,12 @@ const App: React.FC = () => {
 
   // --- Supabase Sincronização ---
   const fetchFromSupabase = async () => {
+    if (!supabase) {
+      setIsDbConnected(false);
+      return;
+    }
+
     try {
-      // Teste de conexão
       const { data: txData, error: txError } = await supabase
         .from('transactions')
         .select('*');
@@ -242,7 +248,7 @@ const App: React.FC = () => {
     } catch (err) {
       console.error("Erro ao conectar ao Supabase:", err);
       setIsDbConnected(false);
-      addToast("Erro na sincronização com o banco de dados.", "error");
+      addToast("Modo Offline: Dados não sincronizados.", "info");
     }
   };
 
@@ -255,14 +261,12 @@ const App: React.FC = () => {
   // --- Handlers Sincronizados ---
 
   const handleQuickChange = async (id: string, amount: number, isPaid: boolean) => {
-    // Atualização local imediata (Otimista)
     setQuickState(prev => ({
       ...prev,
       [monthKey]: { ...prev[monthKey], [id]: { id, amount, isPaid } }
     }));
 
-    // Sincronização com Supabase (Upsert)
-    if (isDbConnected) {
+    if (supabase && isDbConnected) {
       const { error } = await supabase
         .from('quick_state')
         .upsert({ 
@@ -298,7 +302,7 @@ const App: React.FC = () => {
       [monthKey]: [...(prev[monthKey] || []), newTx]
     }));
 
-    if (isDbConnected) {
+    if (supabase && isDbConnected) {
       const { error } = await supabase.from('transactions').insert({
         id: newTx.id,
         description: newTx.description,
@@ -324,7 +328,7 @@ const App: React.FC = () => {
         [monthKey]: prev[monthKey].filter(t => t.id !== id)
       }));
 
-      if (isDbConnected) {
+      if (supabase && isDbConnected) {
         const { error } = await supabase.from('transactions').delete().eq('id', id);
         if (error) addToast("Erro ao excluir do banco.", "error");
       }
@@ -340,7 +344,7 @@ const App: React.FC = () => {
       ...prev, [monthKey]: prev[monthKey].map(tx => tx.id === t.id ? { ...tx, checked: newChecked } : tx)
     }));
 
-    if (isDbConnected) {
+    if (supabase && isDbConnected) {
       const { error } = await supabase.from('transactions').update({ checked: newChecked }).eq('id', t.id);
       if (error) addToast("Erro ao atualizar status.", "error");
     }
@@ -354,7 +358,7 @@ const App: React.FC = () => {
         const newMonthState: Record<string, any> = {};
         [...INCOME_TEMPLATES, ...EXPENSE_TEMPLATES].forEach(async (t) => {
           newMonthState[t.id] = { id: t.id, amount: t.defaultAmount, isPaid: true };
-          if (isDbConnected) {
+          if (supabase && isDbConnected) {
              await supabase.from('quick_state').upsert({ 
                template_id: t.id, 
                amount: t.defaultAmount, 
@@ -403,7 +407,7 @@ const App: React.FC = () => {
       return;
     }
 
-    if (isDbConnected) {
+    if (supabase && isDbConnected) {
       const dbPayload = toAdd.map(tx => ({
         id: tx.id,
         description: tx.description,
@@ -443,7 +447,7 @@ const App: React.FC = () => {
       )
     }));
 
-    if (isDbConnected) {
+    if (supabase && isDbConnected) {
       const { error } = await supabase.from('transactions')
         .update({ description: editDescription, amount: amount })
         .eq('id', editingTransaction.id);
