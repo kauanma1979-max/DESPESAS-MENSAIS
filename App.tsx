@@ -1,10 +1,11 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Wallet, TrendingUp, TrendingDown, Save, Download, Upload, 
-  Plus, Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, 
-  Settings, Link as LinkIcon, Check, Edit, AlertTriangle, Bell, Info
+  Wallet, TrendingUp, TrendingDown, Save, Download, 
+  Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, 
+  Check, Edit, AlertTriangle, Bell, Info, Cloud, CloudOff, Database
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import { INCOME_TEMPLATES, EXPENSE_TEMPLATES, MONTHS, YEARS } from './constants';
 import { 
   Transaction, MonthlyTransactions, MonthlyQuickState, QuickTransactionTemplate 
@@ -14,9 +15,15 @@ import {
   generateId, getCurrentMonthKey 
 } from './utils';
 
+// --- CONFIGURAÇÃO SUPABASE ---
+// IMPORTANTE: Substitua os valores abaixo pelos que você obteve no Passo 3
+const SUPABASE_URL = 'SUA_URL_AQUI'; 
+const SUPABASE_ANON_KEY = 'SUA_CHAVE_ANON_AQUI';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // --- Sub-components ---
 
-// 1. Toast System
 interface Toast {
   id: string;
   message: string;
@@ -47,7 +54,6 @@ const ToastContainer = ({ toasts, removeToast }: { toasts: Toast[]; removeToast:
   );
 };
 
-// 2. Stats Card with Modern Elevation
 const StatCard = ({ title, amount, type }: { title: string; amount: number; type: 'income' | 'expense' | 'balance' }) => {
   let colorClass = 'text-blue-600';
   let bgClass = 'bg-blue-50/50';
@@ -76,7 +82,6 @@ const StatCard = ({ title, amount, type }: { title: string; amount: number; type
   );
 };
 
-// 3. Quick Transaction Row with Mesh Gradient hover
 interface QuickRowProps {
   template: QuickTransactionTemplate;
   state: { amount: number; isPaid: boolean };
@@ -150,6 +155,7 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<MonthlyTransactions>({});
   const [quickState, setQuickState] = useState<MonthlyQuickState>({});
   const [defaultsVersion, setDefaultsVersion] = useState(0);
+  const [isDbConnected, setIsDbConnected] = useState<boolean | null>(null);
   
   const [manualDescription, setManualDescription] = useState('');
   const [manualAmount, setManualAmount] = useState('');
@@ -158,7 +164,6 @@ const App: React.FC = () => {
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Edit/Confirm State
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editDescription, setEditDescription] = useState('');
   const [editAmount, setEditAmount] = useState('');
@@ -191,50 +196,182 @@ const App: React.FC = () => {
     setConfirmModal({ isOpen: true, title, message, onConfirm });
   };
 
-  // --- Effects ---
+  // --- Supabase Sincronização ---
+  const fetchFromSupabase = async () => {
+    try {
+      // Teste de conexão
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .select('*');
+      
+      if (txError) throw txError;
+
+      const organizedTransactions: MonthlyTransactions = {};
+      txData.forEach((tx: any) => {
+        if (!organizedTransactions[tx.month_key]) organizedTransactions[tx.month_key] = [];
+        organizedTransactions[tx.month_key].push({
+          id: tx.id,
+          description: tx.description,
+          amount: parseFloat(tx.amount),
+          category: tx.category,
+          type: tx.type,
+          date: tx.date,
+          checked: tx.checked
+        });
+      });
+
+      const { data: qsData, error: qsError } = await supabase
+        .from('quick_state')
+        .select('*');
+      
+      if (qsError) throw qsError;
+
+      const organizedQuickState: MonthlyQuickState = {};
+      qsData.forEach((qs: any) => {
+        if (!organizedQuickState[qs.month_key]) organizedQuickState[qs.month_key] = {};
+        organizedQuickState[qs.month_key][qs.template_id] = {
+          id: qs.template_id,
+          amount: parseFloat(qs.amount),
+          isPaid: qs.is_paid
+        };
+      });
+
+      setTransactions(organizedTransactions);
+      setQuickState(organizedQuickState);
+      setIsDbConnected(true);
+    } catch (err) {
+      console.error("Erro ao conectar ao Supabase:", err);
+      setIsDbConnected(false);
+      addToast("Erro na sincronização com o banco de dados.", "error");
+    }
+  };
+
   useEffect(() => {
-    const savedTransactions = localStorage.getItem('transactions');
-    const savedQuickState = localStorage.getItem('quickState');
+    fetchFromSupabase();
     const savedDocLink = localStorage.getItem('docLink');
-    if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
-    if (savedQuickState) setQuickState(JSON.parse(savedQuickState));
     if (savedDocLink) setDocLink(savedDocLink);
   }, []);
 
-  useEffect(() => {
-    if (Object.keys(transactions).length > 0) localStorage.setItem('transactions', JSON.stringify(transactions));
-  }, [transactions]);
+  // --- Handlers Sincronizados ---
 
-  useEffect(() => {
-    if (Object.keys(quickState).length > 0) localStorage.setItem('quickState', JSON.stringify(quickState));
-  }, [quickState]);
-
-  // --- Handlers ---
-  const handleQuickChange = (id: string, amount: number, isPaid: boolean) => {
+  const handleQuickChange = async (id: string, amount: number, isPaid: boolean) => {
+    // Atualização local imediata (Otimista)
     setQuickState(prev => ({
       ...prev,
       [monthKey]: { ...prev[monthKey], [id]: { id, amount, isPaid } }
     }));
+
+    // Sincronização com Supabase (Upsert)
+    if (isDbConnected) {
+      const { error } = await supabase
+        .from('quick_state')
+        .upsert({ 
+          template_id: id, 
+          amount, 
+          is_paid: isPaid, 
+          month_key: monthKey 
+        }, { onConflict: 'template_id, month_key' });
+      
+      if (error) addToast("Falha ao salvar no banco.", "error");
+    }
+  };
+
+  const addManualTransaction = async (type: 'income' | 'expense') => {
+    const amount = parseCurrencyInput(manualAmount);
+    if (!manualDescription || amount <= 0) {
+      addToast("Descrição e valor são obrigatórios.", "error");
+      return;
+    }
+
+    const newTx: Transaction = {
+      id: generateId(),
+      description: manualDescription,
+      amount: amount,
+      category: 'Manual',
+      type,
+      date: currentDate.toISOString(),
+      checked: false
+    };
+
+    setTransactions(prev => ({
+      ...prev,
+      [monthKey]: [...(prev[monthKey] || []), newTx]
+    }));
+
+    if (isDbConnected) {
+      const { error } = await supabase.from('transactions').insert({
+        id: newTx.id,
+        description: newTx.description,
+        amount: newTx.amount,
+        category: newTx.category,
+        type: newTx.type,
+        date: newTx.date,
+        checked: newTx.checked,
+        month_key: monthKey
+      });
+      if (error) addToast("Erro ao salvar lançamento.", "error");
+    }
+
+    setManualDescription('');
+    setManualAmount('');
+    addToast("Lançamento adicionado!");
+  };
+
+  const deleteTransaction = async (id: string) => {
+    showConfirm("Excluir", "Tem certeza que deseja remover esta transação?", async () => {
+      setTransactions(prev => ({
+        ...prev,
+        [monthKey]: prev[monthKey].filter(t => t.id !== id)
+      }));
+
+      if (isDbConnected) {
+        const { error } = await supabase.from('transactions').delete().eq('id', id);
+        if (error) addToast("Erro ao excluir do banco.", "error");
+      }
+
+      addToast("Transação removida.");
+      setConfirmModal(null);
+    });
+  };
+
+  const toggleTransactionCheck = async (t: Transaction) => {
+    const newChecked = !t.checked;
+    setTransactions(prev => ({
+      ...prev, [monthKey]: prev[monthKey].map(tx => tx.id === t.id ? { ...tx, checked: newChecked } : tx)
+    }));
+
+    if (isDbConnected) {
+      const { error } = await supabase.from('transactions').update({ checked: newChecked }).eq('id', t.id);
+      if (error) addToast("Erro ao atualizar status.", "error");
+    }
   };
 
   const loadDefaultValues = () => {
     showConfirm(
       "Carregar Padrões",
-      "Isso irá substituir os valores atuais pelos padrões pré-definidos. Deseja continuar?",
+      "Isso irá substituir os valores atuais pelos padrões pré-definidos.",
       () => {
         const newMonthState: Record<string, any> = {};
-        [...INCOME_TEMPLATES, ...EXPENSE_TEMPLATES].forEach(t => {
+        [...INCOME_TEMPLATES, ...EXPENSE_TEMPLATES].forEach(async (t) => {
           newMonthState[t.id] = { id: t.id, amount: t.defaultAmount, isPaid: true };
+          if (isDbConnected) {
+             await supabase.from('quick_state').upsert({ 
+               template_id: t.id, 
+               amount: t.defaultAmount, 
+               is_paid: true, 
+               month_key: monthKey 
+             }, { onConflict: 'template_id, month_key' });
+          }
         });
         setQuickState(prev => ({ ...prev, [monthKey]: newMonthState }));
         setDefaultsVersion(v => v + 1);
-        addToast("Padrões carregados com sucesso!");
+        addToast("Padrões carregados!");
         setConfirmModal(null);
       }
     );
   };
 
-  const saveQuickToLedger = () => {
+  const saveQuickToLedger = async () => {
     const toAdd: Transaction[] = [];
     const existingTransactions = transactions[monthKey] || [];
 
@@ -266,64 +403,53 @@ const App: React.FC = () => {
       return;
     }
 
+    if (isDbConnected) {
+      const dbPayload = toAdd.map(tx => ({
+        id: tx.id,
+        description: tx.description,
+        amount: tx.amount,
+        category: tx.category,
+        type: tx.type,
+        date: tx.date,
+        checked: tx.checked,
+        month_key: monthKey
+      }));
+      const { error } = await supabase.from('transactions').insert(dbPayload);
+      if (error) {
+        addToast("Erro ao consolidar no banco.", "error");
+        return;
+      }
+    }
+
     setTransactions(prev => ({
       ...prev,
       [monthKey]: [...(prev[monthKey] || []), ...toAdd]
     }));
-    addToast(`${toAdd.length} transações consolidadas!`, "success");
+    addToast(`${toAdd.length} transações consolidadas!`);
   };
 
-  const addManualTransaction = (type: 'income' | 'expense') => {
-    const amount = parseCurrencyInput(manualAmount);
-    if (!manualDescription || amount <= 0) {
-      addToast("Descrição e valor são obrigatórios.", "error");
-      return;
-    }
-
-    const newTx: Transaction = {
-      id: generateId(),
-      description: manualDescription,
-      amount: amount,
-      category: 'Manual',
-      type,
-      date: currentDate.toISOString(),
-      checked: false
-    };
-
-    setTransactions(prev => ({
-      ...prev,
-      [monthKey]: [...(prev[monthKey] || []), newTx]
-    }));
-
-    setManualDescription('');
-    setManualAmount('');
-    addToast("Lançamento adicionado!");
-  };
-
-  const deleteTransaction = (id: string) => {
-    showConfirm("Excluir", "Tem certeza que deseja remover esta transação do extrato?", () => {
-      setTransactions(prev => ({
-        ...prev,
-        [monthKey]: prev[monthKey].filter(t => t.id !== id)
-      }));
-      addToast("Transação removida.");
-      setConfirmModal(null);
-    });
-  };
-
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editingTransaction) return;
     const amount = parseCurrencyInput(editAmount);
     if (!editDescription || amount <= 0) {
       addToast("Dados inválidos.", "error");
       return;
     }
+    
     setTransactions(prev => ({
       ...prev,
       [monthKey]: prev[monthKey].map(t => 
         t.id === editingTransaction.id ? { ...t, description: editDescription, amount: amount } : t
       )
     }));
+
+    if (isDbConnected) {
+      const { error } = await supabase.from('transactions')
+        .update({ description: editDescription, amount: amount })
+        .eq('id', editingTransaction.id);
+      if (error) addToast("Erro ao editar no banco.", "error");
+    }
+
     setEditingTransaction(null);
     addToast("Alterações salvas.");
   };
@@ -331,9 +457,7 @@ const App: React.FC = () => {
   const renderTransactionRow = (t: Transaction) => (
     <div key={t.id} className={`fade-in flex items-start p-5 border-b border-slate-100 hover:bg-white/50 transition-modern group ${t.checked ? 'bg-emerald-50/30' : ''}`}>
       <button 
-        onClick={() => setTransactions(prev => ({
-          ...prev, [monthKey]: prev[monthKey].map(tx => tx.id === t.id ? { ...tx, checked: !tx.checked } : tx)
-        }))}
+        onClick={() => toggleTransactionCheck(t)}
         className={`mt-1 mr-4 w-12 h-12 rounded-2xl flex items-center justify-center transition-modern border-2 flex-shrink-0 ${
           t.checked ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-200 hover:border-emerald-200'
         }`}
@@ -369,7 +493,7 @@ const App: React.FC = () => {
     <div className="min-h-screen pb-32">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
       
-      {/* Header com Gradiente Animado */}
+      {/* Header com Gradiente Animado e Indicador de Banco de Dados */}
       <header className="header-animated text-white p-10 shadow-2xl mb-12 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-accent/20 blur-[100px] rounded-full -mr-32 -mt-32"></div>
         <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-center gap-8 relative z-10">
@@ -378,10 +502,22 @@ const App: React.FC = () => {
               <TrendingUp className="text-white w-10 h-10" />
             </div>
             <div>
-              <h1 className="text-4xl font-black tracking-tight flex items-center gap-3">
-                Financeiro <span className="text-accent">Pro</span>
-              </h1>
-              <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Modern Financial Tracking © 2025</p>
+              <div className="flex items-center gap-4">
+                <h1 className="text-4xl font-black tracking-tight flex items-center gap-3">
+                  Financeiro <span className="text-accent">Pro</span>
+                </h1>
+                
+                {/* ÍCONE DE CONEXÃO */}
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${isDbConnected === true ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}`}>
+                  <div className={`w-2 h-2 rounded-full ${isDbConnected === true ? 'bg-emerald-500 pulse-green' : 'bg-rose-500'}`}></div>
+                  {isDbConnected === true ? (
+                    <span className="flex items-center gap-1.5"><Cloud size={12} /> Sincronizado</span>
+                  ) : (
+                    <span className="flex items-center gap-1.5"><CloudOff size={12} /> Offline</span>
+                  )}
+                </div>
+              </div>
+              <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-1">Modern Financial Tracking © 2025</p>
             </div>
           </div>
           
@@ -394,16 +530,15 @@ const App: React.FC = () => {
               a.href = url;
               a.download = `financeiro_pro_backup_${new Date().toISOString().split('T')[0]}.json`;
               a.click();
-              addToast("Backup gerado!");
+              addToast("Backup local gerado!");
             }} className="flex items-center gap-3 px-8 py-4 glass-modal hover:bg-white/20 rounded-2xl text-lg font-bold transition-modern hover:scale-105">
-              <Download size={24} /> Backup
+              <Database size={24} /> Backup
             </button>
           </div>
         </div>
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6">
-        {/* Dashboard Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
           <StatCard title="Entradas" amount={totalIncome} type="income" />
           <StatCard title="Saídas" amount={totalExpense} type="expense" />
@@ -411,10 +546,8 @@ const App: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
-          {/* Main Area */}
           <div className="xl:col-span-8 space-y-12">
             
-            {/* Period Picker */}
             <div className="glass-card p-10 rounded-3xl shadow-xl transition-modern">
               <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
                 <h2 className="text-3xl font-black flex items-center gap-4 text-slate-800">
@@ -444,7 +577,6 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick Templates Area */}
             <div className="glass-card p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden border-t-8 border-primary">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 gap-6">
                  <div>
@@ -487,7 +619,6 @@ const App: React.FC = () => {
               </button>
             </div>
 
-            {/* Manual Form Area */}
             <div className="glass-card p-10 rounded-3xl shadow-xl">
               <h2 className="text-3xl font-black mb-8 text-slate-800">Lançamento Avulso</h2>
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
@@ -513,7 +644,6 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Sidebar */}
           <div className="xl:col-span-4 h-full">
             <div className="glass-card p-8 rounded-[2.5rem] shadow-xl sticky top-8 flex flex-col max-h-[1400px]">
               <h2 className="text-3xl font-black mb-8 flex items-center gap-4 text-slate-800">
@@ -561,8 +691,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* --- Modals with Glassmorphism --- */}
-
       {/* Editing Modal */}
       {editingTransaction && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -570,23 +698,21 @@ const App: React.FC = () => {
              <h3 className="text-3xl font-black mb-8 flex items-center gap-4 text-slate-800">
                <Edit className="text-primary" size={32} /> Ajustar Item
              </h3>
-             
              <div className="space-y-6">
                 <div className="group">
-                  <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-2 transition-colors group-focus-within:text-primary">Descrição</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-2">Descrição</label>
                   <input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} 
-                    className="w-full p-5 glass-modal border-2 border-slate-100 rounded-2xl focus:outline-none focus:ring-8 focus:ring-primary/5 focus:border-primary transition-modern font-bold" />
+                    className="w-full p-5 glass-modal border-2 border-slate-100 rounded-2xl font-bold" />
                 </div>
                 <div className="group">
-                  <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-2 transition-colors group-focus-within:text-primary">Valor</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-2">Valor</label>
                   <input type="text" value={editAmount} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ''); setEditAmount(formatCurrencyInputDisplay(v ? parseInt(v)/100 : 0)); }}
-                    className="w-full p-5 glass-modal border-2 border-slate-100 rounded-2xl focus:outline-none focus:ring-8 focus:ring-primary/5 focus:border-primary transition-modern font-black text-right text-2xl text-primary" />
+                    className="w-full p-5 glass-modal border-2 border-slate-100 rounded-2xl font-black text-right text-2xl text-primary" />
                 </div>
              </div>
-
              <div className="flex justify-end gap-4 mt-12">
                <button onClick={() => setEditingTransaction(null)} className="px-8 py-4 text-slate-500 font-black hover:bg-slate-100 rounded-2xl transition-modern">Descartar</button>
-               <button onClick={saveEdit} className="px-10 py-4 bg-primary text-white font-black rounded-2xl hover:bg-primary/90 transition-modern shadow-xl shadow-primary/20">Salvar Alterações</button>
+               <button onClick={saveEdit} className="px-10 py-4 bg-primary text-white font-black rounded-2xl hover:bg-primary/90 transition-modern shadow-xl">Salvar Alterações</button>
              </div>
           </div>
         </div>
@@ -595,7 +721,7 @@ const App: React.FC = () => {
       {/* Confirmation Modal */}
       {confirmModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="glass-modal rounded-[2.5rem] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] max-w-md w-full p-10 fade-in text-center">
+          <div className="glass-modal rounded-[2.5rem] shadow-2xl max-w-md w-full p-10 fade-in text-center">
              <div className="w-20 h-20 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-6">
                 <AlertTriangle size={40} />
              </div>
@@ -603,7 +729,7 @@ const App: React.FC = () => {
              <p className="text-slate-500 font-medium leading-relaxed mb-10">{confirmModal.message}</p>
              <div className="flex gap-4">
                 <button onClick={() => setConfirmModal(null)} className="flex-1 py-4 glass-modal text-slate-600 font-black rounded-2xl hover:bg-slate-50 transition-modern">Voltar</button>
-                <button onClick={confirmModal.onConfirm} className="flex-1 py-4 bg-rose-500 text-white font-black rounded-2xl hover:bg-rose-600 transition-modern shadow-xl shadow-rose-200">Confirmar</button>
+                <button onClick={confirmModal.onConfirm} className="flex-1 py-4 bg-rose-500 text-white font-black rounded-2xl hover:bg-rose-600 shadow-xl">Confirmar</button>
              </div>
           </div>
         </div>
@@ -614,15 +740,15 @@ const App: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="glass-modal rounded-[2.5rem] shadow-2xl max-w-xl w-full p-12 fade-in">
              <h3 className="text-3xl font-black mb-6 flex items-center gap-4 text-slate-800">
-               <LinkIcon className="text-primary" size={32} /> Link de Arquivos
+               <Database className="text-primary" size={32} /> Link de Arquivos
              </h3>
-             <p className="text-slate-500 font-medium mb-10 leading-relaxed">Conecte sua pasta do Drive ou Cloud para anexar comprovantes rapidamente.</p>
+             <p className="text-slate-500 font-medium mb-10">Conecte sua pasta do Drive ou Cloud.</p>
              <input type="url" value={docLink} onChange={(e) => setDocLink(e.target.value)} placeholder="https://drive.google.com/..."
-               className="w-full p-5 glass-modal border-2 border-slate-100 rounded-2xl mb-12 focus:outline-none focus:ring-8 focus:ring-primary/5 focus:border-primary transition-modern" />
+               className="w-full p-5 glass-modal border-2 border-slate-100 rounded-2xl mb-12 focus:outline-none focus:border-primary transition-modern" />
              <div className="flex justify-end gap-4">
-               <button onClick={() => setIsDocModalOpen(false)} className="px-8 py-4 text-slate-500 font-black hover:bg-slate-100 rounded-2xl transition-modern">Fechar</button>
+               <button onClick={() => setIsDocModalOpen(false)} className="px-8 py-4 text-slate-500 font-black rounded-2xl">Fechar</button>
                <button onClick={() => { localStorage.setItem('docLink', docLink); setIsDocModalOpen(false); addToast("Link configurado!"); }}
-                 className="px-10 py-4 bg-primary text-white font-black rounded-2xl hover:bg-primary/90 transition-modern shadow-xl">Vincular</button>
+                 className="px-10 py-4 bg-primary text-white font-black rounded-2xl shadow-xl">Vincular</button>
              </div>
           </div>
         </div>
