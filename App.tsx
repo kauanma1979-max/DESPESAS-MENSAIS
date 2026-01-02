@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Wallet, TrendingUp, TrendingDown, Save, Download, Upload, 
-  Plus, Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, MoreVertical, Settings, Link as LinkIcon, Check, Edit
+  Plus, Trash2, Calendar, FileText, ExternalLink, CheckCircle, XCircle, 
+  Settings, Link as LinkIcon, Check, Edit, AlertTriangle, Bell, Info
 } from 'lucide-react';
 import { INCOME_TEMPLATES, EXPENSE_TEMPLATES, MONTHS, YEARS } from './constants';
 import { 
@@ -14,36 +16,67 @@ import {
 
 // --- Sub-components ---
 
-// 1. Stats Card
+// 1. Toast System
+interface Toast {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
+const ToastContainer = ({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: string) => void }) => {
+  return (
+    <div className="fixed bottom-8 right-8 z-[100] flex flex-col gap-3">
+      {toasts.map((toast) => (
+        <div 
+          key={toast.id} 
+          className={`fade-in flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl glass-modal min-w-[300px] border-l-4 ${
+            toast.type === 'success' ? 'border-l-emerald-500' : 
+            toast.type === 'error' ? 'border-l-rose-500' : 'border-l-blue-500'
+          }`}
+        >
+          {toast.type === 'success' && <CheckCircle className="text-emerald-500" />}
+          {toast.type === 'error' && <AlertTriangle className="text-rose-500" />}
+          {toast.type === 'info' && <Bell className="text-blue-500" />}
+          <span className="font-bold text-slate-700">{toast.message}</span>
+          <button onClick={() => removeToast(toast.id)} className="ml-auto text-slate-400 hover:text-slate-600">
+            <XCircle size={18} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// 2. Stats Card with Modern Elevation
 const StatCard = ({ title, amount, type }: { title: string; amount: number; type: 'income' | 'expense' | 'balance' }) => {
   let colorClass = 'text-blue-600';
-  let bgClass = 'bg-blue-50';
-  let icon = <Wallet className="w-10 h-10" />;
+  let bgClass = 'bg-blue-50/50';
+  let icon = <Wallet className="w-8 h-8" />;
 
   if (type === 'income') {
     colorClass = 'text-emerald-600';
-    bgClass = 'bg-emerald-50';
-    icon = <TrendingUp className="w-10 h-10" />;
+    bgClass = 'bg-emerald-50/50';
+    icon = <TrendingUp className="w-8 h-8" />;
   } else if (type === 'expense') {
     colorClass = 'text-rose-600';
-    bgClass = 'bg-rose-50';
-    icon = <TrendingDown className="w-10 h-10" />;
+    bgClass = 'bg-rose-50/50';
+    icon = <TrendingDown className="w-8 h-8" />;
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 flex items-center justify-between hover:shadow-md transition-shadow">
+    <div className="fade-in glass-card rounded-2xl p-8 flex items-center justify-between transition-modern hover-elevate group">
       <div>
-        <p className="text-slate-500 text-lg font-bold mb-2 uppercase tracking-wide">{title}</p>
-        <h3 className={`text-5xl font-bold ${colorClass}`}>{formatCurrency(amount)}</h3>
+        <p className="text-slate-400 text-sm font-bold mb-1 uppercase tracking-widest">{title}</p>
+        <h3 className={`text-4xl font-black ${colorClass} tracking-tight`}>{formatCurrency(amount)}</h3>
       </div>
-      <div className={`p-5 rounded-full ${bgClass} ${colorClass}`}>
+      <div className={`p-4 rounded-2xl transition-modern group-hover:scale-110 ${bgClass} ${colorClass}`}>
         {icon}
       </div>
     </div>
   );
 };
 
-// 2. Quick Transaction Row
+// 3. Quick Transaction Row with Mesh Gradient hover
 interface QuickRowProps {
   template: QuickTransactionTemplate;
   state: { amount: number; isPaid: boolean };
@@ -53,7 +86,6 @@ interface QuickRowProps {
 const QuickTransactionRow: React.FC<QuickRowProps> = ({ template, state, onChange }) => {
   const [inputValue, setInputValue] = useState(formatCurrencyInputDisplay(state.amount));
 
-  // Sync internal input state if external state changes (e.g. load defaults)
   useEffect(() => {
     setInputValue(formatCurrencyInputDisplay(state.amount));
   }, [state.amount]);
@@ -64,17 +96,13 @@ const QuickTransactionRow: React.FC<QuickRowProps> = ({ template, state, onChang
 
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
-    // Allow user to empty the field to type new value
     if (val === '') {
         setInputValue('');
         onChange(template.id, 0, false);
         return;
     }
     const num = parseCurrencyInput(val);
-    // Sanitize display slightly while typing to avoid invalid chars
     setInputValue(val.replace(/[^\d,.]/g, '')); 
-    
-    // Auto-mark as paid (active) if user types a value > 0
     onChange(template.id, num, num > 0 ? true : state.isPaid);
   };
 
@@ -83,38 +111,37 @@ const QuickTransactionRow: React.FC<QuickRowProps> = ({ template, state, onChang
   };
 
   return (
-    <div className={`flex items-center gap-4 p-5 bg-white border-2 rounded-2xl shadow-sm transition-all group ${state.isPaid ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-100 hover:border-blue-200'}`}>
+    <div className={`fade-in flex items-center gap-4 p-5 glass-card border-2 rounded-2xl transition-modern group ${state.isPaid ? 'border-emerald-200/50 bg-emerald-50/40' : 'border-transparent hover:border-slate-200'}`}>
       <div className="flex-1">
-        <div className="font-bold text-slate-800 text-xl">{template.name}</div>
+        <div className="font-bold text-slate-700 text-lg group-hover:text-primary transition-colors">{template.name}</div>
       </div>
       
       <div className="relative">
-        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-bold">R$</span>
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">R$</span>
         <input 
           type="text" 
           value={inputValue}
           onChange={handleInput}
           onBlur={handleBlur}
           placeholder="0,00"
-          className="w-48 pl-12 pr-4 py-3 text-right text-2xl font-bold text-slate-700 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary font-mono transition-all"
+          className="w-40 pl-10 pr-4 py-2.5 text-right text-xl font-bold text-slate-700 glass-modal border-2 border-slate-100 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-modern font-mono"
         />
+        {state.amount > 0 && <Check className="absolute -right-2 -top-2 text-emerald-500 w-5 h-5 bg-white rounded-full p-0.5 shadow-sm border border-emerald-100" />}
       </div>
 
       <button 
         onClick={togglePaid}
-        className={`flex items-center justify-center p-4 rounded-xl transition-all shadow-sm ${
+        className={`flex items-center justify-center p-3 rounded-xl transition-modern shadow-sm ${
           state.isPaid 
-            ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-200' 
-            : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+            ? 'bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-emerald-200 scale-105' 
+            : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
         }`}
-        title={state.isPaid ? "Marcado como ativo" : "Marcar como ativo"}
       >
-        {state.isPaid ? <CheckCircle size={32} /> : <XCircle size={32} />}
+        {state.isPaid ? <CheckCircle size={28} /> : <XCircle size={28} />}
       </button>
     </div>
   );
 };
-
 
 // --- Main Application ---
 
@@ -122,115 +149,89 @@ const App: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [transactions, setTransactions] = useState<MonthlyTransactions>({});
   const [quickState, setQuickState] = useState<MonthlyQuickState>({});
-  const [defaultsVersion, setDefaultsVersion] = useState(0); // Used to force re-render inputs
+  const [defaultsVersion, setDefaultsVersion] = useState(0);
   
   const [manualDescription, setManualDescription] = useState('');
   const [manualAmount, setManualAmount] = useState('');
   
   const [docLink, setDocLink] = useState('');
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Edit State
+  // Edit/Confirm State
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editDescription, setEditDescription] = useState('');
   const [editAmount, setEditAmount] = useState('');
+  
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
 
-  // --- Computed ---
   const monthKey = getCurrentMonthKey(currentDate);
   const currentMonthTransactions = transactions[monthKey] || [];
   const currentMonthQuickState = quickState[monthKey] || {};
 
-  // Separate Income and Expense
   const incomeTransactions = currentMonthTransactions.filter(t => t.type === 'income');
   const expenseTransactions = currentMonthTransactions.filter(t => t.type === 'expense');
 
-  const totalIncome = currentMonthTransactions
-    .filter(t => t.type === 'income')
-    .reduce((acc, t) => acc + t.amount, 0);
-  
-  const totalExpense = currentMonthTransactions
-    .filter(t => t.type === 'expense')
-    .reduce((acc, t) => acc + t.amount, 0);
-  
+  const totalIncome = incomeTransactions.reduce((acc, t) => acc + t.amount, 0);
+  const totalExpense = expenseTransactions.reduce((acc, t) => acc + t.amount, 0);
   const balance = totalIncome - totalExpense;
 
+  // --- Helpers ---
+  const addToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    const id = generateId();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => removeToast(id), 4000);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({ isOpen: true, title, message, onConfirm });
+  };
+
   // --- Effects ---
-  
-  // Load from LocalStorage
   useEffect(() => {
     const savedTransactions = localStorage.getItem('transactions');
     const savedQuickState = localStorage.getItem('quickState');
     const savedDocLink = localStorage.getItem('docLink');
-    
     if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
     if (savedQuickState) setQuickState(JSON.parse(savedQuickState));
     if (savedDocLink) setDocLink(savedDocLink);
   }, []);
 
-  // Save to LocalStorage
   useEffect(() => {
-    if (Object.keys(transactions).length > 0) {
-      localStorage.setItem('transactions', JSON.stringify(transactions));
-    }
+    if (Object.keys(transactions).length > 0) localStorage.setItem('transactions', JSON.stringify(transactions));
   }, [transactions]);
 
   useEffect(() => {
-    if (Object.keys(quickState).length > 0) {
-      localStorage.setItem('quickState', JSON.stringify(quickState));
-    }
+    if (Object.keys(quickState).length > 0) localStorage.setItem('quickState', JSON.stringify(quickState));
   }, [quickState]);
 
   // --- Handlers ---
-
-  const changeMonth = (monthIndex: number) => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(monthIndex);
-    setCurrentDate(newDate);
-  };
-
-  const changeYear = (year: number) => {
-    const newDate = new Date(currentDate);
-    newDate.setFullYear(year);
-    setCurrentDate(newDate);
-  };
-
   const handleQuickChange = (id: string, amount: number, isPaid: boolean) => {
     setQuickState(prev => ({
       ...prev,
-      [monthKey]: {
-        ...prev[monthKey],
-        [id]: { id, amount, isPaid }
-      }
+      [monthKey]: { ...prev[monthKey], [id]: { id, amount, isPaid } }
     }));
   };
 
   const loadDefaultValues = () => {
-    if (!confirm("Isso irá substituir os valores atuais da tela pelos padrões. Continuar?")) return;
-
-    // Create a new state object for this month
-    const newMonthState: Record<string, any> = {};
-    
-    // Explicitly populate with defaults from constants
-    // Set isPaid to true so they appear active immediately
-    [...INCOME_TEMPLATES, ...EXPENSE_TEMPLATES].forEach(t => {
-      newMonthState[t.id] = { id: t.id, amount: t.defaultAmount, isPaid: true };
-    });
-
-    setQuickState(prev => ({
-      ...prev,
-      [monthKey]: newMonthState
-    }));
-    
-    // Increment version to force inputs to re-read props
-    setDefaultsVersion(v => v + 1);
-  };
-
-  const handleDocumentsClick = () => {
-    if (docLink) {
-      window.open(docLink, '_blank');
-    } else {
-      setIsDocModalOpen(true);
-    }
+    showConfirm(
+      "Carregar Padrões",
+      "Isso irá substituir os valores atuais pelos padrões pré-definidos. Deseja continuar?",
+      () => {
+        const newMonthState: Record<string, any> = {};
+        [...INCOME_TEMPLATES, ...EXPENSE_TEMPLATES].forEach(t => {
+          newMonthState[t.id] = { id: t.id, amount: t.defaultAmount, isPaid: true };
+        });
+        setQuickState(prev => ({ ...prev, [monthKey]: newMonthState }));
+        setDefaultsVersion(v => v + 1);
+        addToast("Padrões carregados com sucesso!");
+        setConfirmModal(null);
+      }
+    );
   };
 
   const saveQuickToLedger = () => {
@@ -239,14 +240,10 @@ const App: React.FC = () => {
 
     const processTemplate = (t: QuickTransactionTemplate, type: 'income' | 'expense') => {
       const st = currentMonthQuickState[t.id];
-      // Save if there is an amount > 0.
       if (st && st.amount > 0) {
-        // Check for duplicates (same description and same amount in this month)
         const isDuplicate = existingTransactions.some(ex => 
-          ex.description === t.name && 
-          Math.abs(ex.amount - st.amount) < 0.01
+          ex.description === t.name && Math.abs(ex.amount - st.amount) < 0.01
         );
-
         if (!isDuplicate) {
           toAdd.push({
             id: generateId(),
@@ -255,7 +252,7 @@ const App: React.FC = () => {
             category: t.category,
             type: type,
             date: currentDate.toISOString(),
-            checked: false // Default to unchecked
+            checked: false
           });
         }
       }
@@ -265,7 +262,7 @@ const App: React.FC = () => {
     EXPENSE_TEMPLATES.forEach(t => processTemplate(t, 'expense'));
 
     if (toAdd.length === 0) {
-      alert("Nenhuma transação nova encontrada ou todas as transações com valores já foram adicionadas.");
+      addToast("Nenhuma transação nova encontrada.", "info");
       return;
     }
 
@@ -273,14 +270,13 @@ const App: React.FC = () => {
       ...prev,
       [monthKey]: [...(prev[monthKey] || []), ...toAdd]
     }));
-    
-    alert(`${toAdd.length} transações adicionadas ao extrato com sucesso!`);
+    addToast(`${toAdd.length} transações consolidadas!`, "success");
   };
 
   const addManualTransaction = (type: 'income' | 'expense') => {
     const amount = parseCurrencyInput(manualAmount);
     if (!manualDescription || amount <= 0) {
-      alert("Preencha a descrição e um valor válido.");
+      addToast("Descrição e valor são obrigatórios.", "error");
       return;
     }
 
@@ -291,7 +287,7 @@ const App: React.FC = () => {
       category: 'Manual',
       type,
       date: currentDate.toISOString(),
-      checked: false // Default to unchecked
+      checked: false
     };
 
     setTransactions(prev => ({
@@ -301,405 +297,252 @@ const App: React.FC = () => {
 
     setManualDescription('');
     setManualAmount('');
+    addToast("Lançamento adicionado!");
   };
 
   const deleteTransaction = (id: string) => {
-    if (!confirm("Excluir transação?")) return;
-    setTransactions(prev => ({
-      ...prev,
-      [monthKey]: prev[monthKey].filter(t => t.id !== id)
-    }));
-  };
-
-  const toggleTransactionCheck = (id: string) => {
-    setTransactions(prev => ({
-      ...prev,
-      [monthKey]: prev[monthKey].map(t => 
-        t.id === id ? { ...t, checked: !t.checked } : t
-      )
-    }));
-  };
-
-  // --- Edit Functions ---
-  const startEditing = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
-    setEditDescription(transaction.description);
-    setEditAmount(formatCurrencyInputDisplay(transaction.amount));
-  };
-
-  const cancelEdit = () => {
-    setEditingTransaction(null);
-    setEditDescription('');
-    setEditAmount('');
+    showConfirm("Excluir", "Tem certeza que deseja remover esta transação do extrato?", () => {
+      setTransactions(prev => ({
+        ...prev,
+        [monthKey]: prev[monthKey].filter(t => t.id !== id)
+      }));
+      addToast("Transação removida.");
+      setConfirmModal(null);
+    });
   };
 
   const saveEdit = () => {
     if (!editingTransaction) return;
-
     const amount = parseCurrencyInput(editAmount);
     if (!editDescription || amount <= 0) {
-      alert("Preencha a descrição e um valor válido.");
+      addToast("Dados inválidos.", "error");
       return;
     }
-
     setTransactions(prev => ({
       ...prev,
       [monthKey]: prev[monthKey].map(t => 
-        t.id === editingTransaction.id 
-          ? { ...t, description: editDescription, amount: amount } 
-          : t
+        t.id === editingTransaction.id ? { ...t, description: editDescription, amount: amount } : t
       )
     }));
-
-    cancelEdit();
+    setEditingTransaction(null);
+    addToast("Alterações salvas.");
   };
 
-
-  const handleBackup = () => {
-    const data = { transactions, quickState, version: 1 };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `backup_financeiro_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-  };
-
-  const handleRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data.transactions) setTransactions(data.transactions);
-        if (data.quickState) setQuickState(data.quickState);
-        alert("Dados restaurados com sucesso!");
-      } catch (err) {
-        alert("Erro ao ler arquivo de backup.");
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const saveDocLink = () => {
-    localStorage.setItem('docLink', docLink);
-    setIsDocModalOpen(false);
-  };
-
-  // Helper to render transaction row with VERTICAL LAYOUT
   const renderTransactionRow = (t: Transaction) => (
-    <div key={t.id} className={`flex items-start p-6 border-b border-slate-100 hover:bg-slate-50 transition-colors ${t.checked ? 'bg-emerald-50/40' : ''}`}>
-      
-      {/* 1. Checkbox (Left side) */}
+    <div key={t.id} className={`fade-in flex items-start p-5 border-b border-slate-100 hover:bg-white/50 transition-modern group ${t.checked ? 'bg-emerald-50/30' : ''}`}>
       <button 
-        onClick={() => toggleTransactionCheck(t.id)}
-        className={`
-          mt-1 mr-5 w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm border-2 flex-shrink-0
-          ${t.checked 
-            ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-200' 
-            : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300 hover:bg-slate-50'}
-        `}
-        title={t.checked ? "Marcado como conferido" : "Marcar como conferido"}
+        onClick={() => setTransactions(prev => ({
+          ...prev, [monthKey]: prev[monthKey].map(tx => tx.id === t.id ? { ...tx, checked: !tx.checked } : tx)
+        }))}
+        className={`mt-1 mr-4 w-12 h-12 rounded-2xl flex items-center justify-center transition-modern border-2 flex-shrink-0 ${
+          t.checked ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-200 hover:border-emerald-200'
+        }`}
       >
-        <Check size={32} strokeWidth={3} />
+        <Check size={24} strokeWidth={3} />
       </button>
 
-      {/* 2. Content Stack (Middle - Vertical Layout) */}
-      <div className="flex-grow min-w-0 flex flex-col gap-1">
-        
-        {/* NAME - Large, Bold, Breaks words */}
-        <div className={`text-xl font-bold leading-snug break-words ${t.checked ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
+      <div className="flex-grow min-w-0">
+        <div className={`text-lg font-bold truncate ${t.checked ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
           {t.description}
         </div>
-
-        {/* VALUE - Extra Large, Colored */}
-        <div className={`text-2xl font-black ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'} ${t.checked ? 'opacity-60' : ''}`}>
+        <div className={`text-xl font-black ${t.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
           {t.type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
         </div>
-
-        {/* DATE - Smaller, gray */}
-        <div className="text-sm font-medium text-slate-400 flex items-center gap-1">
-          <Calendar size={14} />
-          {new Date(t.date).toLocaleDateString('pt-BR')}
-        </div>
       </div>
 
-      {/* 3. Actions (Right side) */}
-      <div className="flex flex-col gap-2 ml-4 self-center sm:self-start">
-        <button 
-          onClick={() => startEditing(t)}
-          className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
-          title="Editar"
-        >
-          <Edit size={24} />
+      <div className="flex gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-modern">
+        <button onClick={() => {
+          setEditingTransaction(t);
+          setEditDescription(t.description);
+          setEditAmount(formatCurrencyInputDisplay(t.amount));
+        }} className="p-2.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-modern">
+          <Edit size={20} />
         </button>
-        <button 
-          onClick={() => deleteTransaction(t.id)}
-          className="p-3 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
-          title="Excluir"
-        >
-          <Trash2 size={24} />
+        <button onClick={() => deleteTransaction(t.id)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-modern">
+          <Trash2 size={20} />
         </button>
       </div>
-
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-32">
+    <div className="min-h-screen pb-32">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
       
-      {/* Header */}
-      <header className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-8 shadow-xl mb-12">
-        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-5">
-            <div className="bg-primary p-4 rounded-2xl shadow-lg shadow-primary/20">
+      {/* Header com Gradiente Animado */}
+      <header className="header-animated text-white p-10 shadow-2xl mb-12 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-accent/20 blur-[100px] rounded-full -mr-32 -mt-32"></div>
+        <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-center gap-8 relative z-10">
+          <div className="flex items-center gap-6">
+            <div className="header-brand-gradient p-5 rounded-3xl shadow-2xl shadow-accent/30">
               <TrendingUp className="text-white w-10 h-10" />
             </div>
             <div>
-              <h1 className="text-4xl font-extrabold tracking-tight">Financeiro Pro</h1>
-              <p className="text-slate-400 text-lg">Gerenciamento de Despesas</p>
+              <h1 className="text-4xl font-black tracking-tight flex items-center gap-3">
+                Financeiro <span className="text-accent">Pro</span>
+              </h1>
+              <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Modern Financial Tracking © 2025</p>
             </div>
           </div>
           
           <div className="flex gap-4">
-            <button 
-              onClick={handleBackup}
-              className="flex items-center gap-3 px-8 py-4 bg-white/10 hover:bg-white/20 rounded-xl text-lg font-bold transition-all hover:scale-105 active:scale-95 backdrop-blur-sm"
-            >
+            <button onClick={() => {
+              const data = { transactions, quickState, version: 1 };
+              const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `financeiro_pro_backup_${new Date().toISOString().split('T')[0]}.json`;
+              a.click();
+              addToast("Backup gerado!");
+            }} className="flex items-center gap-3 px-8 py-4 glass-modal hover:bg-white/20 rounded-2xl text-lg font-bold transition-modern hover:scale-105">
               <Download size={24} /> Backup
             </button>
-            <label className="flex items-center gap-3 px-8 py-4 bg-white/10 hover:bg-white/20 rounded-xl text-lg font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm">
-              <Upload size={24} /> Restaurar
-              <input type="file" onChange={handleRestore} className="hidden" accept=".json" />
-            </label>
           </div>
         </div>
       </header>
 
-      <main className="max-w-[1600px] mx-auto px-6 sm:px-8">
-        
+      <main className="max-w-[1400px] mx-auto px-6">
         {/* Dashboard Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-          <StatCard title="Receitas do Mês" amount={totalIncome} type="income" />
-          <StatCard title="Despesas do Mês" amount={totalExpense} type="expense" />
-          <StatCard title="Saldo Atual" amount={balance} type="balance" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+          <StatCard title="Entradas" amount={totalIncome} type="income" />
+          <StatCard title="Saídas" amount={totalExpense} type="expense" />
+          <StatCard title="Saldo Consolidado" amount={balance} type="balance" />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
-          
-          {/* LEFT COLUMN: Main Interaction */}
-          <div className="xl:col-span-2 space-y-10">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
+          {/* Main Area */}
+          <div className="xl:col-span-8 space-y-12">
             
-            {/* Year & Month Selector */}
-            <div className="bg-white p-10 rounded-3xl shadow-sm border border-slate-100">
-              <h2 className="text-3xl font-bold mb-8 flex items-center gap-4 text-slate-800">
-                <Calendar className="text-primary" size={36} /> Período
-              </h2>
+            {/* Period Picker */}
+            <div className="glass-card p-10 rounded-3xl shadow-xl transition-modern">
+              <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
+                <h2 className="text-3xl font-black flex items-center gap-4 text-slate-800">
+                  <Calendar className="text-primary" size={32} /> Período
+                </h2>
+                <div className="bg-slate-900 text-white px-10 py-3 rounded-2xl font-black uppercase tracking-widest text-xl shadow-xl">
+                  {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
+                </div>
+              </div>
 
-              {/* Year Selector */}
-              <div className="flex flex-wrap justify-center gap-4 mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="flex flex-wrap gap-3 mb-8">
                 {YEARS.map((year) => (
-                  <button
-                    key={year}
-                    onClick={() => changeYear(year)}
-                    className={`px-8 py-4 rounded-xl text-xl font-bold transition-all ${
-                      currentDate.getFullYear() === year
-                        ? 'bg-slate-800 text-white shadow-xl transform scale-105'
-                        : 'bg-white text-slate-500 hover:bg-slate-200 border border-slate-200 hover:text-slate-700'
-                    }`}
-                  >
+                  <button key={year} onClick={() => setCurrentDate(d => { const n = new Date(d); n.setFullYear(year); return n; })}
+                    className={`px-6 py-3 rounded-xl text-lg font-black transition-modern ${currentDate.getFullYear() === year ? 'bg-primary text-white shadow-xl scale-105' : 'glass-modal text-slate-500 hover:text-primary'}`}>
                     {year}
                   </button>
                 ))}
               </div>
 
-              {/* Month Selector */}
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+              <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
                 {MONTHS.map((m, idx) => (
-                  <button
-                    key={m}
-                    onClick={() => changeMonth(idx)}
-                    className={`py-4 text-lg font-bold rounded-xl transition-all ${
-                      currentDate.getMonth() === idx
-                        ? 'bg-primary text-white shadow-lg shadow-primary/30 transform scale-105'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent hover:border-slate-200'
-                    }`}
-                  >
+                  <button key={m} onClick={() => setCurrentDate(d => { const n = new Date(d); n.setMonth(idx); return n; })}
+                    className={`py-4 font-bold rounded-xl transition-modern ${currentDate.getMonth() === idx ? 'bg-gradient-to-br from-primary to-indigo-600 text-white shadow-lg scale-105' : 'glass-modal text-slate-500 hover:bg-white'}`}>
                     {m.substring(0, 3)}
                   </button>
                 ))}
               </div>
-              <div className="mt-8 text-center">
-                <span className="inline-block font-black text-slate-700 uppercase tracking-widest text-2xl bg-slate-100 px-12 py-4 rounded-full border border-slate-200">
-                  {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
-                </span>
-              </div>
             </div>
 
-            {/* Quick Transactions */}
-            <div className="bg-white p-10 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden">
-               <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-primary to-secondary"></div>
-               
-               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-10 gap-6">
-                 <h2 className="text-3xl font-bold flex items-center gap-4 text-slate-800">
-                   <FileText className="text-primary" size={36} /> Transações Rápidas
-                 </h2>
-                 <div className="flex flex-wrap gap-5 w-full xl:w-auto">
-                    <button 
-                      onClick={loadDefaultValues}
-                      className="flex-1 xl:flex-none px-8 py-4 text-base font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors border border-amber-200 shadow-sm flex items-center justify-center gap-3"
-                    >
-                      <Download size={24} /> Carregar Padrões
-                    </button>
-                    
-                    {/* Unified Documents Button */}
-                    <div className="flex-1 xl:flex-none flex items-stretch rounded-xl shadow-sm overflow-hidden border border-purple-200 bg-purple-50">
-                      <button 
-                        onClick={handleDocumentsClick}
-                        className="flex-grow px-8 py-4 text-base font-bold text-purple-700 hover:bg-purple-100 transition-colors flex items-center justify-center gap-3"
-                      >
-                         <ExternalLink size={24} /> Ver Comprovantes
-                      </button>
-                      <div className="w-px bg-purple-200"></div>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setIsDocModalOpen(true); }}
-                        className="px-4 text-purple-600 hover:bg-purple-100 hover:text-purple-800 transition-colors flex items-center justify-center"
-                        title="Configurar Link"
-                      >
-                        <Settings size={24} />
-                      </button>
-                    </div>
+            {/* Quick Templates Area */}
+            <div className="glass-card p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden border-t-8 border-primary">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 gap-6">
+                 <div>
+                   <h2 className="text-3xl font-black text-slate-800 mb-1 flex items-center gap-4">
+                     <FileText className="text-primary" size={36} /> Templates Rápidos
+                   </h2>
+                   <p className="text-slate-400 font-medium">Lançamentos frequentes com um clique</p>
                  </div>
-               </div>
+                 <div className="flex gap-4 w-full lg:w-auto">
+                    <button onClick={loadDefaultValues} className="flex-1 lg:flex-none px-6 py-4 glass-modal text-amber-600 font-black rounded-2xl hover:bg-amber-50 transition-modern flex items-center justify-center gap-2">
+                      <Download size={20} /> Resetar Padrões
+                    </button>
+                    <button onClick={() => { if(docLink) window.open(docLink, '_blank'); else setIsDocModalOpen(true); }} className="flex-1 lg:flex-none px-6 py-4 glass-modal text-purple-600 font-black rounded-2xl hover:bg-purple-50 transition-modern flex items-center justify-center gap-2">
+                      <ExternalLink size={20} /> Comprovantes
+                    </button>
+                 </div>
+              </div>
 
-               <div className="grid md:grid-cols-2 gap-12">
-                  {/* Income Column */}
-                  <div>
-                    <h3 className="text-2xl font-black text-emerald-600 uppercase mb-6 flex items-center gap-3 pb-4 border-b-2 border-slate-100">
-                      <TrendingUp size={32} /> Receitas
+              <div className="grid lg:grid-cols-2 gap-12 mb-12">
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2 mb-4">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> Entradas Automáticas
                     </h3>
-                    <div className="space-y-5">
-                      {INCOME_TEMPLATES.map(t => (
-                        <QuickTransactionRow 
-                          key={`${t.id}-${defaultsVersion}`} // Use key to force re-mount on version change
-                          template={t} 
-                          state={currentMonthQuickState[t.id] || { id: t.id, amount: 0, isPaid: false }}
-                          onChange={handleQuickChange}
-                        />
-                      ))}
-                    </div>
+                    {INCOME_TEMPLATES.map(t => (
+                      <QuickTransactionRow key={`${t.id}-${defaultsVersion}`} template={t} state={currentMonthQuickState[t.id] || { id: t.id, amount: 0, isPaid: false }} onChange={handleQuickChange} />
+                    ))}
                   </div>
-
-                  {/* Expense Column */}
-                  <div>
-                    <h3 className="text-2xl font-black text-rose-600 uppercase mb-6 flex items-center gap-3 pb-4 border-b-2 border-slate-100">
-                      <TrendingDown size={32} /> Despesas
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-black text-rose-500 uppercase tracking-widest flex items-center gap-2 mb-4">
+                      <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div> Saídas Planejadas
                     </h3>
-                    <div className="space-y-5">
-                      {EXPENSE_TEMPLATES.map(t => (
-                        <QuickTransactionRow 
-                          key={`${t.id}-${defaultsVersion}`} // Use key to force re-mount on version change
-                          template={t} 
-                          state={currentMonthQuickState[t.id] || { id: t.id, amount: 0, isPaid: false }}
-                          onChange={handleQuickChange}
-                        />
-                      ))}
-                    </div>
+                    {EXPENSE_TEMPLATES.map(t => (
+                      <QuickTransactionRow key={`${t.id}-${defaultsVersion}`} template={t} state={currentMonthQuickState[t.id] || { id: t.id, amount: 0, isPaid: false }} onChange={handleQuickChange} />
+                    ))}
                   </div>
-               </div>
+              </div>
 
-               <div className="mt-12 flex justify-end">
-                 <button 
-                  onClick={saveQuickToLedger}
-                  className="w-full md:w-auto flex items-center justify-center gap-3 px-10 py-5 bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/90 hover:to-indigo-700 text-white rounded-2xl shadow-xl shadow-indigo-200 transition-all transform hover:-translate-y-1 active:translate-y-0 font-bold text-xl"
-                 >
-                   <Save size={28} /> Consolidar e Salvar no Extrato
-                 </button>
-               </div>
+              <button onClick={saveQuickToLedger} className="w-full py-6 bg-gradient-to-r from-primary to-secondary text-white rounded-[2rem] font-black text-xl shadow-2xl hover:scale-[1.02] active:scale-95 transition-modern flex items-center justify-center gap-4">
+                <Save size={28} /> Consolidar no Extrato Mensal
+              </button>
             </div>
 
-            {/* Manual Entry */}
-            <div className="bg-white p-10 rounded-3xl shadow-sm border border-slate-100">
-              <h2 className="text-3xl font-bold mb-8 flex items-center gap-4 text-slate-800">
-                <Plus className="text-primary" size={36} /> Adicionar Manualmente
-              </h2>
-              <div className="flex flex-col lg:flex-row gap-8 items-end">
-                <div className="w-full lg:flex-1">
-                  <label className="block text-lg font-bold text-slate-500 mb-3">Descrição</label>
-                  <input 
-                    type="text" 
-                    value={manualDescription}
-                    onChange={(e) => setManualDescription(e.target.value)}
-                    placeholder="Ex: Jantar fora"
-                    className="w-full p-5 text-xl border-2 border-slate-200 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary focus:outline-none transition-all"
-                  />
+            {/* Manual Form Area */}
+            <div className="glass-card p-10 rounded-3xl shadow-xl">
+              <h2 className="text-3xl font-black mb-8 text-slate-800">Lançamento Avulso</h2>
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
+                <div className="md:col-span-6 group">
+                  <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-2 transition-colors group-focus-within:text-primary">Descrição do Item</label>
+                  <input type="text" value={manualDescription} onChange={(e) => setManualDescription(e.target.value)} placeholder="O que você comprou/recebeu?"
+                    className="w-full p-5 text-lg glass-modal border-2 border-slate-100 rounded-[1.5rem] focus:outline-none focus:ring-8 focus:ring-primary/5 focus:border-primary transition-modern" />
                 </div>
-                <div className="w-full lg:w-56">
-                  <label className="block text-lg font-bold text-slate-500 mb-3">Valor</label>
-                  <input 
-                    type="text" 
-                    value={manualAmount}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^\d]/g, '');
-                      setManualAmount(formatCurrencyInputDisplay(val ? parseInt(val)/100 : 0));
-                    }}
-                    placeholder="0,00"
-                    className="w-full p-5 text-xl font-bold text-right border-2 border-slate-200 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary focus:outline-none transition-all"
-                  />
+                <div className="md:col-span-3 group">
+                  <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-2 transition-colors group-focus-within:text-primary">Valor (R$)</label>
+                  <input type="text" value={manualAmount} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ''); setManualAmount(formatCurrencyInputDisplay(v ? parseInt(v)/100 : 0)); }} placeholder="0,00"
+                    className="w-full p-5 text-lg font-black text-right glass-modal border-2 border-slate-100 rounded-[1.5rem] focus:outline-none focus:ring-8 focus:ring-primary/5 focus:border-primary transition-modern" />
                 </div>
-                <div className="flex gap-4 w-full lg:w-auto">
-                  <button 
-                    onClick={() => addManualTransaction('income')}
-                    className="flex-1 lg:flex-none px-8 py-5 bg-emerald-100 text-emerald-700 font-bold text-lg rounded-xl hover:bg-emerald-200 transition-colors flex items-center justify-center"
-                  >
-                    + Receita
+                <div className="md:col-span-3 flex gap-3">
+                  <button onClick={() => addManualTransaction('income')} className="flex-1 p-5 glass-modal text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-[1.5rem] transition-modern shadow-lg flex items-center justify-center">
+                    <TrendingUp size={28} />
                   </button>
-                  <button 
-                    onClick={() => addManualTransaction('expense')}
-                    className="flex-1 lg:flex-none px-8 py-5 bg-rose-100 text-rose-700 font-bold text-lg rounded-xl hover:bg-rose-200 transition-colors flex items-center justify-center"
-                  >
-                    - Despesa
+                  <button onClick={() => addManualTransaction('expense')} className="flex-1 p-5 glass-modal text-rose-600 hover:bg-rose-500 hover:text-white rounded-[1.5rem] transition-modern shadow-lg flex items-center justify-center">
+                    <TrendingDown size={28} />
                   </button>
                 </div>
               </div>
             </div>
-
           </div>
 
-          {/* RIGHT COLUMN: History & Charts */}
-          <div className="space-y-10">
-            
-            {/* Transaction List */}
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col h-[1400px]">
-              <h2 className="text-3xl font-bold mb-8 flex items-center gap-4 text-slate-800">
-                <MoreVertical className="text-primary" size={36} /> Extrato do Mês
+          {/* Sidebar */}
+          <div className="xl:col-span-4 h-full">
+            <div className="glass-card p-8 rounded-[2.5rem] shadow-xl sticky top-8 flex flex-col max-h-[1400px]">
+              <h2 className="text-3xl font-black mb-8 flex items-center gap-4 text-slate-800">
+                <Bell className="text-primary" size={32} /> Histórico
               </h2>
               
-              <div className="flex-1 overflow-y-auto pr-3 space-y-4 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
                 {currentMonthTransactions.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                    <Wallet size={80} className="mb-6 opacity-20" />
-                    <p className="text-xl font-medium">Nenhuma transação registrada.</p>
+                  <div className="h-64 flex flex-col items-center justify-center text-slate-300">
+                    <Info size={48} className="mb-4 opacity-20" />
+                    <p className="font-bold">Nada por aqui ainda.</p>
                   </div>
                 ) : (
                   <>
-                    {/* INCOMES SECTION */}
                     {incomeTransactions.length > 0 && (
                       <div className="mb-8">
-                        <h3 className="text-xl font-black text-emerald-600 uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-emerald-100">
-                          Receitas
-                        </h3>
+                        <div className="sticky top-0 bg-white/80 backdrop-blur-md z-10 py-3 mb-2 flex items-center justify-between px-4 rounded-xl">
+                          <span className="text-xs font-black text-emerald-500 uppercase tracking-widest">Entradas</span>
+                          <span className="text-sm font-black text-emerald-500">{formatCurrency(totalIncome)}</span>
+                        </div>
                         {incomeTransactions.map(renderTransactionRow)}
                       </div>
                     )}
-
-                    {/* EXPENSES SECTION */}
                     {expenseTransactions.length > 0 && (
                       <div>
-                         <h3 className="text-xl font-black text-rose-600 uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-rose-100">
-                          Despesas
-                        </h3>
+                        <div className="sticky top-0 bg-white/80 backdrop-blur-md z-10 py-3 mb-2 flex items-center justify-between px-4 rounded-xl">
+                          <span className="text-xs font-black text-rose-500 uppercase tracking-widest">Saídas</span>
+                          <span className="text-sm font-black text-rose-500">{formatCurrency(totalExpense)}</span>
+                        </div>
                         {expenseTransactions.map(renderTransactionRow)}
                       </div>
                     )}
@@ -707,118 +550,79 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              {/* Statement Summary Footer */}
-              <div className="mt-6 pt-6 border-t-2 border-slate-100 bg-slate-50/50 p-6 rounded-2xl">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center text-slate-600">
-                    <span className="font-semibold text-lg">Total Receitas</span>
-                    <span className="font-bold text-emerald-600 text-lg">+ {formatCurrency(totalIncome)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-slate-600">
-                    <span className="font-semibold text-lg">Total Despesas</span>
-                    <span className="font-bold text-rose-600 text-lg">- {formatCurrency(totalExpense)}</span>
-                  </div>
-                  <div className="h-px bg-slate-200 my-3"></div>
-                  <div className="flex justify-between items-center text-xl">
-                    <span className="font-extrabold text-slate-800">Saldo Final</span>
-                    <span className={`font-black text-2xl ${balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {formatCurrency(balance)}
-                    </span>
-                  </div>
+              <div className="mt-8 pt-8 border-t-2 border-slate-100/50">
+                <div className={`p-8 rounded-[2rem] shadow-2xl transition-modern ${balance >= 0 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
+                  <p className="font-black text-xs uppercase tracking-widest opacity-70 mb-1">Status do Mês</p>
+                  <div className="text-3xl font-black">{formatCurrency(balance)}</div>
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       </main>
 
+      {/* --- Modals with Glassmorphism --- */}
+
       {/* Editing Modal */}
       {editingTransaction && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-10 animate-in fade-in zoom-in duration-200">
-             <h3 className="text-3xl font-bold mb-6 flex items-center gap-4 text-slate-800">
-               <Edit className="text-primary" size={36} /> Editar Transação
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="glass-modal rounded-[2.5rem] shadow-2xl max-w-lg w-full p-12 fade-in">
+             <h3 className="text-3xl font-black mb-8 flex items-center gap-4 text-slate-800">
+               <Edit className="text-primary" size={32} /> Ajustar Item
              </h3>
              
-             <label className="block text-base font-bold text-slate-700 mb-3">Descrição</label>
-             <input 
-               type="text"
-               value={editDescription}
-               onChange={(e) => setEditDescription(e.target.value)}
-               className="w-full p-5 border-2 border-slate-200 rounded-xl mb-6 focus:ring-4 focus:ring-primary/10 focus:border-primary focus:outline-none transition-all text-lg"
-             />
+             <div className="space-y-6">
+                <div className="group">
+                  <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-2 transition-colors group-focus-within:text-primary">Descrição</label>
+                  <input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} 
+                    className="w-full p-5 glass-modal border-2 border-slate-100 rounded-2xl focus:outline-none focus:ring-8 focus:ring-primary/5 focus:border-primary transition-modern font-bold" />
+                </div>
+                <div className="group">
+                  <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-2 transition-colors group-focus-within:text-primary">Valor</label>
+                  <input type="text" value={editAmount} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ''); setEditAmount(formatCurrencyInputDisplay(v ? parseInt(v)/100 : 0)); }}
+                    className="w-full p-5 glass-modal border-2 border-slate-100 rounded-2xl focus:outline-none focus:ring-8 focus:ring-primary/5 focus:border-primary transition-modern font-black text-right text-2xl text-primary" />
+                </div>
+             </div>
 
-             <label className="block text-base font-bold text-slate-700 mb-3">Valor</label>
-             <input 
-               type="text"
-               value={editAmount}
-               onChange={(e) => {
-                const val = e.target.value.replace(/[^\d]/g, '');
-                setEditAmount(formatCurrencyInputDisplay(val ? parseInt(val)/100 : 0));
-               }}
-               className="w-full p-5 border-2 border-slate-200 rounded-xl mb-8 focus:ring-4 focus:ring-primary/10 focus:border-primary focus:outline-none transition-all text-lg font-bold text-right"
-             />
-
-             <div className="flex justify-end gap-4">
-               <button 
-                onClick={cancelEdit}
-                className="px-8 py-4 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors text-lg"
-               >
-                 Cancelar
-               </button>
-               <button 
-                onClick={saveEdit}
-                className="px-8 py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/30 text-lg"
-               >
-                 Salvar
-               </button>
+             <div className="flex justify-end gap-4 mt-12">
+               <button onClick={() => setEditingTransaction(null)} className="px-8 py-4 text-slate-500 font-black hover:bg-slate-100 rounded-2xl transition-modern">Descartar</button>
+               <button onClick={saveEdit} className="px-10 py-4 bg-primary text-white font-black rounded-2xl hover:bg-primary/90 transition-modern shadow-xl shadow-primary/20">Salvar Alterações</button>
              </div>
           </div>
         </div>
       )}
 
-      {/* Documents Modal */}
+      {/* Confirmation Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="glass-modal rounded-[2.5rem] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] max-w-md w-full p-10 fade-in text-center">
+             <div className="w-20 h-20 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertTriangle size={40} />
+             </div>
+             <h3 className="text-2xl font-black text-slate-800 mb-4">{confirmModal.title}</h3>
+             <p className="text-slate-500 font-medium leading-relaxed mb-10">{confirmModal.message}</p>
+             <div className="flex gap-4">
+                <button onClick={() => setConfirmModal(null)} className="flex-1 py-4 glass-modal text-slate-600 font-black rounded-2xl hover:bg-slate-50 transition-modern">Voltar</button>
+                <button onClick={confirmModal.onConfirm} className="flex-1 py-4 bg-rose-500 text-white font-black rounded-2xl hover:bg-rose-600 transition-modern shadow-xl shadow-rose-200">Confirmar</button>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Docs Modal */}
       {isDocModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-10 animate-in fade-in zoom-in duration-200">
-             <h3 className="text-3xl font-bold mb-6 flex items-center gap-4 text-slate-800">
-               <LinkIcon className="text-primary" size={36} /> Configurar Link
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="glass-modal rounded-[2.5rem] shadow-2xl max-w-xl w-full p-12 fade-in">
+             <h3 className="text-3xl font-black mb-6 flex items-center gap-4 text-slate-800">
+               <LinkIcon className="text-primary" size={32} /> Link de Arquivos
              </h3>
-             <p className="text-slate-500 text-lg mb-8 leading-relaxed">
-               Cole o link da sua pasta na nuvem (Google Drive, Dropbox, OneDrive) para acesso rápido aos comprovantes.
-             </p>
-             <label className="block text-base font-bold text-slate-700 mb-3">URL da Pasta</label>
-             <input 
-               type="url"
-               value={docLink}
-               onChange={(e) => setDocLink(e.target.value)}
-               placeholder="https://"
-               className="w-full p-5 border-2 border-slate-200 rounded-xl mb-8 focus:ring-4 focus:ring-primary/10 focus:border-primary focus:outline-none transition-all text-lg"
-             />
+             <p className="text-slate-500 font-medium mb-10 leading-relaxed">Conecte sua pasta do Drive ou Cloud para anexar comprovantes rapidamente.</p>
+             <input type="url" value={docLink} onChange={(e) => setDocLink(e.target.value)} placeholder="https://drive.google.com/..."
+               className="w-full p-5 glass-modal border-2 border-slate-100 rounded-2xl mb-12 focus:outline-none focus:ring-8 focus:ring-primary/5 focus:border-primary transition-modern" />
              <div className="flex justify-end gap-4">
-               {docLink && (
-                 <a 
-                   href={docLink} 
-                   target="_blank" 
-                   rel="noreferrer"
-                   className="mr-auto text-primary flex items-center gap-2 hover:underline font-bold text-base bg-primary/5 px-5 py-3 rounded-xl"
-                 >
-                   <ExternalLink size={20} /> Testar
-                 </a>
-               )}
-               <button 
-                onClick={() => setIsDocModalOpen(false)}
-                className="px-8 py-4 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors text-lg"
-               >
-                 Cancelar
-               </button>
-               <button 
-                onClick={saveDocLink}
-                className="px-8 py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/30 text-lg"
-               >
-                 Salvar
-               </button>
+               <button onClick={() => setIsDocModalOpen(false)} className="px-8 py-4 text-slate-500 font-black hover:bg-slate-100 rounded-2xl transition-modern">Fechar</button>
+               <button onClick={() => { localStorage.setItem('docLink', docLink); setIsDocModalOpen(false); addToast("Link configurado!"); }}
+                 className="px-10 py-4 bg-primary text-white font-black rounded-2xl hover:bg-primary/90 transition-modern shadow-xl">Vincular</button>
              </div>
           </div>
         </div>
